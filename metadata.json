@@ -1,0 +1,8 @@
+{
+  "name": "Gestor de Compra Coletiva PMMG",
+  "description": "Plataforma operacional para consolidação de demandas e gestão de compras coletivas de fardamento e equipamentos militares.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

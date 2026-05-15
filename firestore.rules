@@ -1,0 +1,209 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // -------------------------------------------------------------------------
+    // GLOBAL HELPERS
+    // -------------------------------------------------------------------------
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isAdmin() {
+      // Bootstrapped admin by email or lookup in admins collection
+      return isSignedIn() && (
+        (request.auth.token.email == 'zecarocha7@gmail.com' && request.auth.token.email_verified == true) ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // -------------------------------------------------------------------------
+    // VALIDATION HELPERS
+    // -------------------------------------------------------------------------
+
+    function isValidUser(data) {
+      return data.fullName is string && data.fullName.size() <= 200 &&
+             data.pmNumber is string && data.pmNumber.size() <= 20 &&
+             data.unit is string && data.unit.size() <= 100 &&
+             data.city is string && data.city.size() <= 100 &&
+             data.phone is string && data.phone.size() <= 20 &&
+             (data.address == null || (data.address is string && data.address.size() <= 500)) &&
+             data.role in ['militar', 'administrador', 'fornecedor'] &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp;
+    }
+
+    function isValidVendor(data) {
+      return data.name is string && data.name.size() <= 100 &&
+             data.description is string && data.description.size() <= 1000 &&
+             data.banner is string && data.banner.size() <= 500 &&
+             data.status is string && data.status.size() <= 50 &&
+             data.quality is string && data.quality.size() <= 50;
+    }
+
+    function isValidProduct(data) {
+      return data.vendorId is string && data.vendorId.size() <= 128 &&
+             data.name is string && data.name.size() <= 200 &&
+             data.category is string && data.category.size() <= 100 &&
+             data.price is number && data.price >= 0 &&
+             data.image is string && data.image.size() <= 500 &&
+             data.description is string && data.description.size() <= 2000;
+    }
+
+    function isValidKit(data) {
+      return data.name is string && data.name.size() <= 200 &&
+             data.description is string && data.description.size() <= 1000 &&
+             data.image is string && data.image.size() <= 500 &&
+             data.price is number && data.price >= 0 &&
+             data.originalPrice is number && data.originalPrice >= 0 &&
+             data.vendorId is string && data.vendorId.size() <= 128;
+    }
+
+    function isValidOrder(data) {
+      return data.userId is string && data.userId.size() <= 128 &&
+             data.items is list && data.items.size() <= 100 &&
+             data.total is number && data.total >= 0 &&
+             data.status in ['Pendente', 'Processando', 'Em Trânsito', 'Concluído', 'Cancelado'] &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidIntent(data) {
+      return data.userId is string && data.userId.size() <= 128 &&
+             data.productId is string && data.productId.size() <= 128 &&
+             data.fullName is string && data.fullName.size() <= 200 &&
+             data.pmNumber is string && data.pmNumber.size() <= 20 &&
+             data.unit is string && data.unit.size() <= 100 &&
+             data.city is string && data.city.size() <= 100 &&
+             data.phone is string && data.phone.size() <= 20 &&
+             data.email is string && data.email.size() <= 100 &&
+             data.quantity is number && data.quantity > 0 &&
+             data.protocol is string && data.protocol.size() <= 50 &&
+             data.status in ['Registrado', 'Validado', 'Consolidado', 'Em Fabricação', 'Entregue'] &&
+             data.createdAt is timestamp;
+    }
+
+    // -------------------------------------------------------------------------
+    // DEFAULT DENY
+    // -------------------------------------------------------------------------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // USERS
+    // -------------------------------------------------------------------------
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isOwner(userId) && isValidUser(incoming()) && 
+                       (incoming().role != 'administrador' || request.auth.token.email == 'zecarocha7@gmail.com') &&
+                       incoming().createdAt == request.time &&
+                       incoming().updatedAt == request.time;
+      allow update: if isOwner(userId) && 
+                       isValidUser(incoming()) && 
+                       (incoming().role == existing().role || (isAdmin() && incoming().role in ['militar', 'administrador', 'fornecedor'])) &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().updatedAt == request.time &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'pmNumber', 'unit', 'city', 'phone', 'photoUrl', 'address', 'role', 'updatedAt']);
+    }
+
+    // -------------------------------------------------------------------------
+    // VENDORS
+    // -------------------------------------------------------------------------
+    match /vendors/{vendorId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // PRODUCTS
+    // -------------------------------------------------------------------------
+    match /products/{productId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // KITS
+    // -------------------------------------------------------------------------
+    match /kits/{kitId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // ORDERS
+    // -------------------------------------------------------------------------
+    match /orders/{orderId} {
+      allow get: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      
+      allow create: if isSignedIn() && 
+                       exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+                       isValidOrder(incoming()) && 
+                       incoming().userId == request.auth.uid &&
+                       incoming().status == 'Pendente' &&
+                       incoming().createdAt == request.time &&
+                       isValidId(orderId);
+                       
+      allow update: if (isAdmin() && 
+                       isValidOrder(incoming()) && 
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       (
+                         (incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])) ||
+                         (incoming().diff(existing()).affectedKeys().hasOnly(['status', 'trackingNumber', 'updatedAt'])) ||
+                         (incoming().diff(existing()).affectedKeys().hasOnly(['status', 'logisticStatus', 'updatedAt']))
+                       )) || (
+                         isOwner(existing().userId) && 
+                         existing().status == 'Pendente' &&
+                         incoming().status == 'Cancelado' &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+                       );
+                       
+      allow delete: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // INTENTS
+    // -------------------------------------------------------------------------
+    match /intents/{intentId} {
+      allow get: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      
+      allow create: if isSignedIn() && 
+                       isValidIntent(incoming()) && 
+                       incoming().userId == request.auth.uid &&
+                       incoming().status == 'Registrado' &&
+                       incoming().createdAt == request.time;
+                       
+      allow update: if isAdmin() && 
+                       isValidIntent(incoming()) && 
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']);
+                       
+      allow delete: if isAdmin();
+    }
+  }
+}

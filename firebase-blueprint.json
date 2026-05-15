@@ -1,0 +1,56 @@
+{
+  "entities": {
+    "MilitaryProfile": {
+      "title": "Military Profile",
+      "description": "User profile for military personnel",
+      "type": "object",
+      "properties": {
+        "fullName": { "type": "string" },
+        "pmNumber": { "type": "string" },
+        "unit": { "type": "string" },
+        "city": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["militar", "administrador", "fornecedor"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["fullName", "pmNumber", "unit", "city", "phone", "email", "role", "createdAt", "updatedAt"]
+    },
+    "PurchaseIntent": {
+      "title": "Purchase Intent",
+      "description": "Intent to participate in a collective purchase",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "productId": { "type": "string" },
+        "productName": { "type": "string" },
+        "vendorId": { "type": "string" },
+        "fullName": { "type": "string" },
+        "pmNumber": { "type": "string" },
+        "unit": { "type": "string" },
+        "city": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "quantity": { "type": "number", "minimum": 1 },
+        "size": { "type": "string" },
+        "color": { "type": "string" },
+        "notes": { "type": "string" },
+        "protocol": { "type": "string" },
+        "status": { "type": "string", "enum": ["Registrado", "Validado", "Consolidado", "Em Fabricação", "Entregue"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "productId", "productName", "vendorId", "fullName", "pmNumber", "unit", "city", "phone", "email", "quantity", "protocol", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "MilitaryProfile",
+      "description": "User profile documents"
+    },
+    "/intents/{intentId}": {
+      "schema": "PurchaseIntent",
+      "description": "Collective purchase interest registration"
+    }
+  }
+}
