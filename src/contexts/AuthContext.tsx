@@ -6,10 +6,11 @@ import { User, MilitaryProfile } from '../types';
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (pmNumber: string, password: string) => Promise<void>;
   register: (email: string, password: string, profile: Omit<MilitaryProfile, 'createdAt' | 'updatedAt'>) => Promise<void>;
   logout: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
+  updatePasswordByEmail: (email: string, newPassword: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -48,8 +49,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => unsubscribe();
   }, []);
 
-  const login = async (email: string, password: string) => {
-    await firebaseService.login(email, password);
+  const login = async (pmNumber: string, password: string) => {
+    await firebaseService.login(pmNumber, password);
   };
 
   const register = async (email: string, password: string, profile: Omit<MilitaryProfile, 'createdAt' | 'updatedAt'>) => {
@@ -64,8 +65,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await firebaseService.resetPassword(email);
   };
 
+  const updatePasswordByEmail = async (email: string, newPassword: string) => {
+    await firebaseService.updatePasswordByEmail(email, newPassword);
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, resetPassword }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, resetPassword, updatePasswordByEmail }}>
       {children}
     </AuthContext.Provider>
   );

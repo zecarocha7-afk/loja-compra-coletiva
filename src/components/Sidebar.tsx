@@ -34,34 +34,48 @@ export default function Sidebar({ activeView, onViewChange, isOpen, onToggle }: 
   const profile = user?.profile;
   const isAdmin = profile?.role === 'administrador';
 
-  const menuItemsByRole = [
-    { 
-      id: 'products', 
-      label: isAdmin ? 'Gestão de Itens' : 'Produtos disponíveis', 
-      icon: 'Package' 
-    },
-    { 
-      id: 'suppliers', 
-      label: isAdmin ? 'Gestão de Fornecedores' : 'Nossos Fornecedores', 
-      icon: 'Factory' 
-    },
-    { 
-      id: 'collective-list', 
-      label: isAdmin ? 'Consolidação de Lotes' : 'Minhas intenções', 
-      icon: 'ListChecks' 
-    },
-    { 
-      id: 'admin', 
-      label: 'Painel Estratégico', 
-      icon: 'ShieldAlert',
-      adminOnly: true
-    }
-  ];
+  const menuItemsByRole = isAdmin
+    ? [
+        { 
+          id: 'products', 
+          label: 'Gestão de Produtos', 
+          icon: 'Package' 
+        },
+        { 
+          id: 'suppliers', 
+          label: 'Gestão de Fornecedores', 
+          icon: 'Factory' 
+        },
+        { 
+          id: 'collective-list', 
+          label: 'Consolidação de Lotes', 
+          icon: 'ListChecks' 
+        },
+        { 
+          id: 'admin', 
+          label: 'Painel Estratégico', 
+          icon: 'ShieldAlert'
+        }
+      ]
+    : [
+        { 
+          id: 'products', 
+          label: 'Gestão de Produtos', 
+          icon: 'Package' 
+        },
+        { 
+          id: 'suppliers', 
+          label: 'Gestão de Fornecedores', 
+          icon: 'Factory' 
+        },
+        { 
+          id: 'campaigns', 
+          label: 'Campanhas', 
+          icon: 'ListChecks'
+        }
+      ];
 
-  const visibleMenuItems = menuItemsByRole.filter(item => {
-    if (item.adminOnly && !isAdmin) return false;
-    return true;
-  });
+  const visibleMenuItems = menuItemsByRole;
 
   return (
     <>

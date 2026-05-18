@@ -1,5 +1,5 @@
-import { Product, MilitaryProfile, PurchaseIntent, Supplier } from '../types';
-import { PRODUCTS as INITIAL_PRODUCTS, SUPPLIERS as INITIAL_SUPPLIERS } from '../constants';
+import { Product, MilitaryProfile, PurchaseIntent, Supplier, Campaign } from '../types';
+import { PRODUCTS as INITIAL_PRODUCTS, SUPPLIERS as INITIAL_SUPPLIERS, CAMPAIGNS as INITIAL_CAMPAIGNS } from '../constants';
 
 const STORAGE_KEYS = {
   PRODUCTS: 'pmmg_products',
@@ -7,7 +7,8 @@ const STORAGE_KEYS = {
   USERS: 'pmmg_users',
   USER: 'pmmg_user',
   PROFILE: 'pmmg_profile',
-  SUPPLIERS: 'pmmg_suppliers'
+  SUPPLIERS: 'pmmg_suppliers',
+  CAMPAIGNS: 'pmmg_campaigns'
 };
 
 const getStorage = <T>(key: string, defaultValue: T): T => {
@@ -40,46 +41,113 @@ const MOCK_PROFILE: MilitaryProfile = {
   updatedAt: Date.now()
 };
 
+// Initialize default users if they don't exist
+const initializeDefaultUsers = () => {
+  const users = getStorage<any[]>(STORAGE_KEYS.USERS, []);
+  let updated = false;
+
+  if (!users.some(u => u.profile?.pmNumber === '000.000-0')) {
+    users.push({
+      uid: 'admin-01',
+      email: 'admin@pmmg.gov.br',
+      password: 'admin',
+      profile: {
+        fullName: 'Administrador 01',
+        pmNumber: '000.000-0',
+        unit: 'CG - Comando Geral',
+        city: 'Belo Horizonte',
+        phone: '31 99999-9999',
+        email: 'admin@pmmg.gov.br',
+        role: 'administrador',
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      }
+    });
+    updated = true;
+  }
+
+  if (!users.some(u => u.profile?.pmNumber === '123.456-7')) {
+    users.push({
+      uid: 'militar-01',
+      email: 'militar@pmmg.gov.br',
+      password: '123456',
+      profile: {
+        fullName: 'Cabo Silva',
+        pmNumber: '123.456-7',
+        unit: '1º BPM',
+        city: 'Belo Horizonte',
+        phone: '31 98888-8888',
+        email: 'militar@pmmg.gov.br',
+        role: 'militar',
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      }
+    });
+    updated = true;
+  }
+
+  if (updated) {
+    setStorage(STORAGE_KEYS.USERS, users);
+  }
+};
+
+initializeDefaultUsers();
+
 export const firebaseService = {
   // Auth & Profile
   async register(email: string, password: string, profile: Omit<MilitaryProfile, 'createdAt' | 'updatedAt'>) {
     const users = getStorage<any[]>(STORAGE_KEYS.USERS, []);
-    const uid = 'user-' + Date.now();
-    const newUser = { uid, email };
     
-    users.push({ ...newUser, profile: { ...profile, createdAt: Date.now() } });
+    // Validations
+    if (!profile.fullName || !profile.pmNumber || !profile.email || !profile.phone || !profile.unit || !password) {
+      throw new Error('Todos os campos são obrigatórios.');
+    }
+
+    const pmExists = users.some(u => u.profile?.pmNumber === profile.pmNumber);
+    if (pmExists) {
+      throw new Error('Número PM já cadastrado.');
+    }
+
+    const emailExists = users.some(u => u.email.toLowerCase() === email.toLowerCase());
+    if (emailExists) {
+      throw new Error('E-mail corporativo já cadastrado.');
+    }
+
+    const uid = 'user-' + Date.now();
+    const newUser = { 
+      uid, 
+      email, 
+      password, 
+      profile: { ...profile, createdAt: Date.now(), updatedAt: Date.now() } 
+    };
+    
+    users.push(newUser);
     setStorage(STORAGE_KEYS.USERS, users);
     
-    setStorage(STORAGE_KEYS.USER, newUser);
-    setStorage(STORAGE_KEYS.PROFILE, { ...profile, createdAt: Date.now() });
+    // We do NOT set the active user session on registration so they must login manually!
     return uid;
   },
 
-  async login(email: string, password: string) {
+  async login(pmNumber: string, password: string) {
     const users = getStorage<any[]>(STORAGE_KEYS.USERS, []);
-    const userInStorage = users.find(u => u.email === email);
+    
+    if (!pmNumber || !password) {
+      throw new Error('Preencha o Número PM e a senha.');
+    }
+
+    const userInStorage = users.find(u => u.profile?.pmNumber === pmNumber);
 
     if (userInStorage) {
-      setStorage(STORAGE_KEYS.USER, { uid: userInStorage.uid, email: userInStorage.email });
-      setStorage(STORAGE_KEYS.PROFILE, userInStorage.profile);
-      return { user: userInStorage };
+      if (userInStorage.password === password) {
+        setStorage(STORAGE_KEYS.USER, { uid: userInStorage.uid, email: userInStorage.email });
+        setStorage(STORAGE_KEYS.PROFILE, userInStorage.profile);
+        return { user: userInStorage };
+      } else {
+        throw new Error('Senha incorreta.');
+      }
     }
 
-    if (email === 'admin@pmmg.gov.br') {
-        const user = { uid: 'admin-01', email };
-        const profile: MilitaryProfile = { 
-          ...MOCK_PROFILE, 
-          fullName: 'Administrador 01', 
-          role: 'administrador',
-          email: 'admin@pmmg.gov.br'
-        };
-        setStorage(STORAGE_KEYS.USER, user);
-        setStorage(STORAGE_KEYS.PROFILE, profile);
-        return { user };
-    }
-    setStorage(STORAGE_KEYS.USER, MOCK_USER);
-    setStorage(STORAGE_KEYS.PROFILE, MOCK_PROFILE);
-    return { user: MOCK_USER };
+    throw new Error('Número PM não cadastrado ou senha incorreta.');
   },
 
   async logout() {
@@ -90,6 +158,26 @@ export const firebaseService = {
 
   async resetPassword(email: string) {
     console.log('Resetting password for:', email);
+    const users = getStorage<any[]>(STORAGE_KEYS.USERS, []);
+    const userExists = users.some(u => u.email.toLowerCase() === email.toLowerCase());
+    if (!userExists) {
+      throw new Error('E-mail corporativo não cadastrado.');
+    }
+  },
+
+  async updatePasswordByEmail(email: string, newPassword: string) {
+    const users = getStorage<any[]>(STORAGE_KEYS.USERS, []);
+    const userIndex = users.findIndex(u => u.email.toLowerCase() === email.toLowerCase());
+
+    if (userIndex === -1) {
+      throw new Error('E-mail corporativo não cadastrado.');
+    }
+
+    users[userIndex].password = newPassword;
+    if (users[userIndex].profile) {
+      users[userIndex].profile.updatedAt = Date.now();
+    }
+    setStorage(STORAGE_KEYS.USERS, users);
   },
 
   async getUserProfile(uid: string): Promise<MilitaryProfile | null> {
@@ -226,6 +314,43 @@ export const firebaseService = {
     const check = () => {
       const users = getStorage<any[]>(STORAGE_KEYS.USERS, []);
       callback(users);
+    };
+    window.addEventListener('storage_update', check);
+    check();
+    return () => window.removeEventListener('storage_update', check);
+  },
+
+  // Campaigns Management
+  async createCampaign(data: Omit<Campaign, 'id'>): Promise<Campaign> {
+    const campaigns = getStorage<Campaign[]>(STORAGE_KEYS.CAMPAIGNS, INITIAL_CAMPAIGNS);
+    const newCampaign: Campaign = {
+      ...data,
+      id: 'camp-' + Date.now()
+    };
+    campaigns.push(newCampaign);
+    setStorage(STORAGE_KEYS.CAMPAIGNS, campaigns);
+    return newCampaign;
+  },
+
+  async updateCampaign(id: string, data: Partial<Campaign>): Promise<void> {
+    const campaigns = getStorage<Campaign[]>(STORAGE_KEYS.CAMPAIGNS, INITIAL_CAMPAIGNS);
+    const index = campaigns.findIndex(c => c.id === id);
+    if (index !== -1) {
+      campaigns[index] = { ...campaigns[index], ...data };
+      setStorage(STORAGE_KEYS.CAMPAIGNS, campaigns);
+    }
+  },
+
+  async deleteCampaign(id: string): Promise<void> {
+    let campaigns = getStorage<Campaign[]>(STORAGE_KEYS.CAMPAIGNS, INITIAL_CAMPAIGNS);
+    campaigns = campaigns.filter(c => c.id !== id);
+    setStorage(STORAGE_KEYS.CAMPAIGNS, campaigns);
+  },
+
+  onCampaignsChange(callback: (campaigns: Campaign[]) => void) {
+    const check = () => {
+      const campaigns = getStorage<Campaign[]>(STORAGE_KEYS.CAMPAIGNS, INITIAL_CAMPAIGNS);
+      callback(campaigns);
     };
     window.addEventListener('storage_update', check);
     check();

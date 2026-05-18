@@ -1,14 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, Filter, Grid, List, Sparkles, Timer, ArrowRight } from 'lucide-react';
+import { Search, Sparkles, Timer, ArrowRight, Edit, Trash2, Plus } from 'lucide-react';
 import { firebaseService } from '../../services/firebaseService';
 import { Product, PurchaseIntent, User, Campaign } from '../../types';
-import { CAMPAIGNS } from '../../constants';
 import { ProductCard } from '../ProductCard';
 import InterestModal from '../InterestModal';
 import ProtocolReceipt from '../ProtocolReceipt';
 import ProductFormModal from '../ProductFormModal';
-import { Plus } from 'lucide-react';
+import CampaignFormModal from '../CampaignFormModal';
 
 interface ProductsViewProps {
   user: User | null;
@@ -19,19 +18,38 @@ export default function ProductsView({ user }: ProductsViewProps) {
   const [search, setSearch] = useState('');
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [receiptIntent, setReceiptIntent] = useState<PurchaseIntent | null>(null);
+  
+  // Product Form Modals
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+
+  // Campaign Form Modals
+  const [isCampaignModalOpen, setIsCampaignModalOpen] = useState(false);
+  const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
+
   const isAdmin = user?.profile?.role === 'administrador';
 
   useEffect(() => {
-    const unsubscribe = firebaseService.onProductsChange((data) => {
+    let productsUnsubscribe: (() => void) | null = null;
+    let campaignsUnsubscribe: (() => void) | null = null;
+
+    productsUnsubscribe = firebaseService.onProductsChange((data) => {
       setProducts(data);
       setLoading(false);
     });
-    return () => unsubscribe();
+
+    campaignsUnsubscribe = firebaseService.onCampaignsChange((data) => {
+      setCampaigns(data);
+    });
+
+    return () => {
+      if (productsUnsubscribe) productsUnsubscribe();
+      if (campaignsUnsubscribe) campaignsUnsubscribe();
+    };
   }, []);
 
   const filteredProducts = products.filter(p => {
@@ -42,11 +60,20 @@ export default function ProductsView({ user }: ProductsViewProps) {
     return matchesSearch && matchesCampaign;
   });
 
-  const selectedCampaign = CAMPAIGNS.find(c => c.id === selectedCampaignId);
+  const selectedCampaign = campaigns.find(c => c.id === selectedCampaignId);
 
   const handleDeleteProduct = async (p: Product) => {
     if (confirm(`Tem certeza que deseja excluir o produto ${p.name}?`)) {
       await firebaseService.deleteProduct(p.id);
+    }
+  };
+
+  const handleDeleteCampaign = async (campaign: Campaign) => {
+    if (confirm(`Excluir campanha "${campaign.name}"? Os produtos vinculados perderão a associação de lote coletivo.`)) {
+      await firebaseService.deleteCampaign(campaign.id);
+      if (selectedCampaignId === campaign.id) {
+        setSelectedCampaignId(null);
+      }
     }
   };
 
@@ -141,14 +168,25 @@ export default function ProductsView({ user }: ProductsViewProps) {
                     {selectedCampaign?.name}
                   </h2>
                 </div>
-                <p className="text-zinc-300 text-sm lg:text-base leading-relaxed">
+                <p className="text-zinc-300 text-sm lg:text-base leading-relaxed font-mono">
                   {selectedCampaign?.description}
                 </p>
-                <div className="flex items-center gap-4">
+                <div className="flex flex-wrap items-center gap-4">
                   <div className="bg-industrial-red px-4 py-2 rounded-full text-[10px] font-black text-white uppercase tracking-widest flex items-center gap-2">
                     <Timer className="w-3 h-3" />
                     Encerra em: {selectedCampaign?.deadline}
                   </div>
+                  {isAdmin && selectedCampaign && (
+                    <button
+                      onClick={() => {
+                        setEditingCampaign(selectedCampaign);
+                        setIsCampaignModalOpen(true);
+                      }}
+                      className="px-4 py-2 bg-black/60 border border-white/10 hover:border-industrial-gold text-[10px] font-black uppercase text-white hover:text-industrial-gold rounded-full transition-colors flex items-center gap-1.5"
+                    >
+                      <Edit className="w-3 h-3" /> Editar Campanha
+                    </button>
+                  )}
                 </div>
               </div>
             </motion.div>
@@ -166,28 +204,54 @@ export default function ProductsView({ user }: ProductsViewProps) {
             </h3>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {CAMPAIGNS.map(campaign => (
-              <motion.button
-                key={campaign.id}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => setSelectedCampaignId(campaign.id)}
-                className="relative h-48 rounded-2xl overflow-hidden group border border-white/5 text-left"
-              >
-                <img 
-                  src={campaign.banner} 
-                  alt={campaign.name} 
-                  className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover:opacity-60 transition-opacity duration-500"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent"></div>
-                <div className="absolute inset-0 p-6 flex flex-col justify-end gap-2">
-                  <span className="text-industrial-gold text-[10px] font-black uppercase tracking-[0.2em]">{campaign.status}</span>
-                  <div className="flex justify-between items-end">
-                    <h4 className="text-xl font-black text-white uppercase tracking-tight">{campaign.name}</h4>
-                    <ArrowRight className="w-5 h-5 text-white group-hover:translate-x-2 transition-transform" />
+            {campaigns.map(campaign => (
+              <div key={campaign.id} className="relative group rounded-2xl overflow-hidden border border-white/5 h-48 bg-zinc-950">
+                {/* Admin controls */}
+                {isAdmin && (
+                  <div className="absolute top-4 right-4 z-20 flex gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingCampaign(campaign);
+                        setIsCampaignModalOpen(true);
+                      }}
+                      className="p-2 bg-black/85 border border-white/10 hover:border-industrial-gold rounded-lg text-white hover:text-industrial-gold transition-all"
+                      title="Editar Campanha"
+                    >
+                      <Edit className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteCampaign(campaign);
+                      }}
+                      className="p-2 bg-black/85 border border-white/10 hover:border-industrial-red rounded-lg text-white hover:text-industrial-red transition-all"
+                      title="Excluir Campanha"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
-                </div>
-              </motion.button>
+                )}
+
+                <button
+                  onClick={() => setSelectedCampaignId(campaign.id)}
+                  className="w-full h-full text-left relative block"
+                >
+                  <img 
+                    src={campaign.banner} 
+                    alt={campaign.name} 
+                    className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover:opacity-60 transition-opacity duration-500"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent"></div>
+                  <div className="absolute inset-0 p-6 flex flex-col justify-end gap-2">
+                    <span className="text-industrial-gold text-[10px] font-black uppercase tracking-[0.2em]">{campaign.status}</span>
+                    <div className="flex justify-between items-end">
+                      <h4 className="text-xl font-black text-white uppercase tracking-tight">{campaign.name}</h4>
+                      <ArrowRight className="w-5 h-5 text-white group-hover:translate-x-2 transition-transform" />
+                    </div>
+                  </div>
+                </button>
+              </div>
             ))}
           </div>
         </section>
@@ -210,12 +274,20 @@ export default function ProductsView({ user }: ProductsViewProps) {
 
           <div className="flex flex-col sm:flex-row items-center gap-4 w-full md:w-auto">
             {isAdmin && (
-              <button 
-                onClick={() => { setEditingProduct(null); setIsFormModalOpen(true); }}
-                className="w-full sm:w-auto whitespace-nowrap px-6 py-4 bg-industrial-gold text-black rounded-xl text-xs font-black uppercase tracking-widest hover:bg-yellow-500 transition-all flex items-center justify-center gap-2"
-              >
-                <Plus className="w-4 h-4" /> Novo Produto
-              </button>
+              <>
+                <button 
+                  onClick={() => { setEditingCampaign(null); setIsCampaignModalOpen(true); }}
+                  className="w-full sm:w-auto whitespace-nowrap px-6 py-4 bg-industrial-red text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-red-600 transition-all flex items-center justify-center gap-2 shadow-lg shadow-industrial-red/10 border border-white/5"
+                >
+                  <Plus className="w-4 h-4" /> Nova Campanha
+                </button>
+                <button 
+                  onClick={() => { setEditingProduct(null); setIsFormModalOpen(true); }}
+                  className="w-full sm:w-auto whitespace-nowrap px-6 py-4 bg-industrial-gold text-black rounded-xl text-xs font-black uppercase tracking-widest hover:bg-yellow-500 transition-all flex items-center justify-center gap-2"
+                >
+                  <Plus className="w-4 h-4" /> Novo Produto
+                </button>
+              </>
             )}
             <div className="flex bg-zinc-900 border border-white/5 rounded-xl overflow-hidden items-center w-full max-w-md focus-within:border-industrial-red/50 transition-all">
             <div className="pl-4 text-zinc-600">
@@ -296,6 +368,16 @@ export default function ProductsView({ user }: ProductsViewProps) {
           <ProductFormModal
             product={editingProduct}
             onClose={() => { setIsFormModalOpen(false); setEditingProduct(null); }}
+            onSuccess={() => {}}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isCampaignModalOpen && (
+          <CampaignFormModal
+            campaign={editingCampaign}
+            onClose={() => { setIsCampaignModalOpen(false); setEditingCampaign(null); }}
             onSuccess={() => {}}
           />
         )}

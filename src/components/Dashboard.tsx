@@ -59,7 +59,9 @@ export default function Dashboard() {
   const renderView = () => {
     switch (activeView) {
       case 'products':
-        return <ProductsView user={user} />;
+        return <ProductsView user={user} initialFilterMode="individual" />;
+      case 'campaigns':
+        return <ProductsView user={user} initialFilterMode="collective" />;
       case 'suppliers':
         return <SuppliersView user={user} />;
       case 'collective-list':

@@ -47,10 +47,10 @@ export default function SuppliersView({ user }: SuppliersViewProps) {
         <div>
           <h2 className="text-2xl font-black text-white uppercase tracking-widest flex items-center gap-3">
              <div className="w-2 h-8 bg-industrial-gold"></div>
-             Fornecedores
+             Catálogos de Fornecedores Homologados
           </h2>
           <p className="text-[11px] font-mono text-gray-500 uppercase tracking-tighter mt-1">
-            Gestão e Catálogos de Fornecedores Homologados
+             Gestão de Fornecedores e Parcerias Homologadas
           </p>
         </div>
         {isAdmin && (
